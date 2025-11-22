@@ -1,0 +1,5 @@
+{
+  "name": "DFT Smart CO Generator",
+  "description": "A React application that simulates a DFT Smart CO system interaction, generate compliant XML outputs.",
+  "requestFramePermissions": []
+}
