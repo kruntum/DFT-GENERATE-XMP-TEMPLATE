@@ -1,6 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
-import { SmartCOData, TRANSPORT_MODES, COUNTRIES, WEIGHT_UNITS, PACKAGE_UNITS, MEASUREMENT_UNITS, ProductItem, CURRENCIES, InvoiceItem, ShippingMarkItem } from '../types';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { SmartCOData, ProductItem, InvoiceItem, ShippingMarkItem } from '../types';
+import { getTransportModes, getCountries, getWeightUnits, getPackageUnits, getMeasurementUnits, getCurrencies, getThaiLocations } from '../services/dataService';
 
 interface Props {
   onSubmit: (data: SmartCOData) => void;
@@ -35,6 +36,20 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
+  // Use Data Service
+  const TRANSPORT_MODES = getTransportModes();
+  const COUNTRIES = getCountries();
+  const CURRENCIES = getCurrencies();
+  const WEIGHT_UNITS = getWeightUnits();
+  const PACKAGE_UNITS = getPackageUnits();
+  const MEASUREMENT_UNITS = getMeasurementUnits();
+  const THAI_LOCATIONS = useMemo(() => getThaiLocations(), []);
+
+  // Autocomplete State
+  const [departureSuggestions, setDepartureSuggestions] = useState<{Code: string, Name: string}[]>([]);
+  const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
+  const departureInputRef = useRef<HTMLInputElement>(null);
+
   const [data, setData] = useState<SmartCOData>({
     formId: '35',
     exporter: { 
@@ -49,7 +64,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
         obPhone: '',
         obFax: '',
         emailCh01: '',
-        dftOfficeId: '', // Default to Central
+        dftOfficeId: '1', // Default to Central
         radBy: '',
         tranBy: ''
     },
@@ -68,17 +83,17 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
         obAddress: ''
     },
     transport: {
-      departureDate: new Date().toISOString().split('T')[0],
-      transportBy: '',
+      departureDate: '',
+      transportBy: 'BY SEA FREIGHT',
       vehicleName: '',
       portDischarge: '',
       billRefNo: '',
-      vehicleUuid: '',
+      vehicleUuid: '', // Will be generated
       orderNo: '1',
       shipBy: '1',
       shipByOther: '',
       billType: 'B/L',
-      sailingDate: new Date().toISOString().split('T')[0],
+      sailingDate: '',
       vehicleNameList: '',
       placeDeparture: '',
       portDischargeLink: ''
@@ -108,11 +123,10 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
     invoices: [],
     prevFormNo: '',
     prevFormDate: '',
-    // Initialize with one default shipping mark
     shippingMarksList: [],
     products: [],
     productCurrency: 'USD',
-    productInvoiceShowInCol10: '',
+    productInvoiceShowInCol10: 'INVOICE_ABROAD',
     showTotalValueFobUs: false,
     showTotalValueFobUsOther: false,
     showTotalInvoiceOtherCountryUsValue: false,
@@ -154,7 +168,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
     
     // Legacy / Linked
     invoiceNo: '', 
-    invoiceDate: new Date().toISOString().split('T')[0],
+    invoiceDate: '',
     linkedInvoiceId: '',
     linkedAbroadInvoiceId: '',
     
@@ -167,7 +181,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   // State for new invoice
   const [newInvoice, setNewInvoice] = useState<{no: string, date: string, type: string}>({
       no: '',
-      date: new Date().toISOString().split('T')[0],
+      date: '',
       type: 'INVOICE_THAI'
   });
 
@@ -179,10 +193,41 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
       }), { totalFob: 0, totalNetWeight: 0 });
   }, [data.products]);
 
+  // Handle click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (departureInputRef.current && !departureInputRef.current.contains(event.target as Node)) {
+        setShowDepartureSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleExporterChange = (f: string, v: string) => setData(p => ({ ...p, exporter: { ...p.exporter, [f]: v } }));
   const handleImporterChange = (f: string, v: string) => setData(p => ({ ...p, importer: { ...p.importer, [f]: v } }));
   const handleTransportChange = (f: string, v: string) => setData(p => ({ ...p, transport: { ...p.transport, [f]: v } }));
   
+  const handleDepartureChange = (val: string) => {
+      handleTransportChange('placeDeparture', val);
+      if (val.trim() === '') {
+          setDepartureSuggestions([]);
+          setShowDepartureSuggestions(false);
+          return;
+      }
+      const filtered = THAI_LOCATIONS.filter(l => 
+          l.Name.toLowerCase().includes(val.toLowerCase()) || 
+          l.Code.toLowerCase().includes(val.toLowerCase())
+      );
+      setDepartureSuggestions(filtered);
+      setShowDepartureSuggestions(true);
+  };
+
+  const selectDeparture = (val: string) => {
+      handleTransportChange('placeDeparture', val);
+      setShowDepartureSuggestions(false);
+  };
+
   const toggleCondition = (key: keyof typeof data.specialConditions) => {
       setData(p => ({ ...p, specialConditions: { ...p.specialConditions, [key]: !p.specialConditions[key] } }));
   };
@@ -197,7 +242,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
           ...p,
           invoices: [...p.invoices, { id: Date.now().toString(), invoiceNo: newInvoice.no, invoiceDate: newInvoice.date, invoiceType: newInvoice.type }]
       }));
-      setNewInvoice({ no: '', date: new Date().toISOString().split('T')[0], type: data.specialConditions.thirdPartyInvoicing ? 'INVOICE_ABROAD' : 'INVOICE_THAI' });
+      setNewInvoice({ no: '', date: '', type: data.specialConditions.thirdPartyInvoicing ? 'INVOICE_ABROAD' : 'INVOICE_THAI' });
   };
 
   const handleDeleteInvoice = (id: string) => {
@@ -220,9 +265,6 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   };
 
   const handleDeleteShippingMark = (id: string) => {
-      if (data.shippingMarksList.length <= 1) {
-          return alert('ต้องมี Shipping Mark อย่างน้อย 1 รายการ');
-      }
       if (confirm('ต้องการลบ Shipping Mark นี้หรือไม่?')) {
           setData(p => ({ ...p, shippingMarksList: p.shippingMarksList.filter(sm => sm.id !== id) }));
       }
@@ -244,17 +286,17 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
           brand: '',
           model: '',
           hsCode: '',
-          originCriteria: '',
+          originCriteria: 'WO',
           originCriteriaPercent: '',
           
           netWeight: '',
-          netWeightUnit: '',
+          netWeightUnit: 'KGM',
           grossWeight: '',
-          grossWeightUnit: '',
+          grossWeightUnit: 'KGM',
           quantity: '',
-          quantityUnit: '',
+          quantityUnit: 'BG',
           qtyPackage: '',
-          qtyPackageUnit: '',
+          qtyPackageUnit: 'CT',
 
           showNetWeight: true,
           showGrossWeight: true,
@@ -263,11 +305,11 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
           fobValue: '',
           fobValueOther: '',
           invoiceNo: '',
-          invoiceDate: new Date().toISOString().split('T')[0],
+          invoiceDate: '',
           linkedInvoiceId: '',
           linkedAbroadInvoiceId: '',
           
-          // Default to the first available shipping mark
+          // Default to the first available shipping mark if exists
           selectedShippingMarkId: data.shippingMarksList[0]?.id || '',
           invoiceOtherCountryValue: ''
       });
@@ -286,7 +328,9 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
       if (data.specialConditions.thirdPartyInvoicing && !newProduct.linkedAbroadInvoiceId) {
           return alert('กรุณาเลือก Invoice ต่างประเทศ (สำหรับ Third Party)');
       }
-      if (!newProduct.selectedShippingMarkId) return alert('กรุณาเลือก Shipping Mark');
+      if (data.shippingMarksList.length > 0 && !newProduct.selectedShippingMarkId) {
+           return alert('กรุณาเลือก Shipping Mark');
+      }
 
       if (editingProductId) {
           // Update existing product
@@ -326,7 +370,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
       }
   }, [data.specialConditions.thirdPartyInvoicing]);
 
-  // Common Input Style for "Real System" look
+  // Common Input Style
   const inputClass = "w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white text-slate-700 shadow-sm";
   const labelClass = "block text-sm font-bold text-slate-600 mb-1";
   const sectionTitleClass = "text-base font-bold text-slate-800 flex items-center gap-2";
@@ -455,6 +499,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                     <label className={labelClass}>ประเทศปลายทาง :</label>
                     <select className={inputClass}
                         value={data.importer.country} onChange={e => handleImporterChange('country', e.target.value)}>
+                        <option value="">เลือกประเทศ...</option>
                         {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                 </div>
@@ -560,8 +605,6 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                 </div>
             </div>
             
- 
-            
              <div className="border-t border-slate-200 my-4"></div>
 
              {/* Display Fields */}
@@ -589,13 +632,33 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-12 items-center">
+            <div className="grid grid-cols-12 items-center relative" ref={departureInputRef as any}>
                 <div className="col-span-3 text-right pr-6">
                     <label className="text-sm font-bold text-slate-700">Place of Departure :</label>
                 </div>
-                <div className="col-span-9">
-                     <input type="text" className={inputClass}
-                        value={data.transport.placeDeparture} onChange={e => handleTransportChange('placeDeparture', e.target.value)} />
+                <div className="col-span-9 relative">
+                     <input 
+                        type="text" 
+                        className={inputClass}
+                        value={data.transport.placeDeparture} 
+                        onChange={e => handleDepartureChange(e.target.value)}
+                        onFocus={e => handleDepartureChange(e.target.value)}
+                        placeholder="พิมพ์ชื่อท่าเรือ/สถานที่..."
+                     />
+                     {showDepartureSuggestions && departureSuggestions.length > 0 && (
+                         <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
+                             {departureSuggestions.map((loc, idx) => (
+                                 <div 
+                                    key={idx} 
+                                    className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700 text-sm"
+                                    onClick={() => selectDeparture(loc.Name)}
+                                 >
+                                     <span className="font-bold text-blue-600 w-16 inline-block">{loc.Code}</span>
+                                     <span>{loc.Name}</span>
+                                 </div>
+                             ))}
+                         </div>
+                     )}
                 </div>
             </div>
 
