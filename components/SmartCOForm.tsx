@@ -48,7 +48,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   // Autocomplete State
   const [departureSuggestions, setDepartureSuggestions] = useState<{Code: string, Name: string}[]>([]);
   const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
-  const departureInputRef = useRef<HTMLInputElement>(null);
+  const departureInputRef = useRef<HTMLDivElement>(null);
 
   const [data, setData] = useState<SmartCOData>({
     formId: '35',
@@ -123,7 +123,8 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
     invoices: [],
     prevFormNo: '',
     prevFormDate: '',
-    shippingMarksList: [],
+    // Ensure there is at least one empty mark initially with a stable ID
+    shippingMarksList: [{ id: 'sm_default', mark: '' }],
     products: [],
     productCurrency: 'USD',
     productInvoiceShowInCol10: 'INVOICE_ABROAD',
@@ -251,9 +252,11 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
 
   // Shipping Mark Handlers
   const handleAddShippingMark = () => {
+      // Use random suffix to prevent ID collision on fast clicks
+      const uniqueId = `sm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setData(p => ({
           ...p,
-          shippingMarksList: [...p.shippingMarksList, { id: `sm_${Date.now()}`, mark: '' }]
+          shippingMarksList: [...p.shippingMarksList, { id: uniqueId, mark: '' }]
       }));
   };
 
@@ -265,6 +268,21 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   };
 
   const handleDeleteShippingMark = (id: string) => {
+      const index = data.shippingMarksList.findIndex(sm => sm.id === id);
+      
+      // Strictly prevent deleting the first item (index 0)
+      if (index === 0) {
+          // No alert needed, visual cue (disabled button) handles it
+          return;
+      }
+
+      // If text is empty, delete without confirm for better UX
+      const item = data.shippingMarksList[index];
+      if (!item.mark || item.mark.trim() === '') {
+          setData(p => ({ ...p, shippingMarksList: p.shippingMarksList.filter(sm => sm.id !== id) }));
+          return;
+      }
+
       if (confirm('ต้องการลบ Shipping Mark นี้หรือไม่?')) {
           setData(p => ({ ...p, shippingMarksList: p.shippingMarksList.filter(sm => sm.id !== id) }));
       }
@@ -375,6 +393,9 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
   const labelClass = "block text-sm font-bold text-slate-600 mb-1";
   const sectionTitleClass = "text-base font-bold text-slate-800 flex items-center gap-2";
   const sectionNumberClass = "bg-green-500 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold";
+  // Updated styles for radio/checkbox to ensure they are white with gray borders (fixing dark theme issue)
+  const checkboxClass = "w-5 h-5 text-blue-600 accent-blue-600 bg-white border border-gray-300 rounded focus:ring-2 focus:ring-blue-500";
+  const radioClass = "w-4 h-4 text-blue-600 accent-blue-600 bg-white border border-gray-300 focus:ring-2 focus:ring-blue-500";
   
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(data); }} className="font-sans text-sm space-y-6">
@@ -632,7 +653,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-12 items-center relative" ref={departureInputRef as any}>
+            <div className="grid grid-cols-12 items-center relative" ref={departureInputRef}>
                 <div className="col-span-3 text-right pr-6">
                     <label className="text-sm font-bold text-slate-700">Place of Departure :</label>
                 </div>
@@ -643,6 +664,11 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                         value={data.transport.placeDeparture} 
                         onChange={e => handleDepartureChange(e.target.value)}
                         onFocus={e => handleDepartureChange(e.target.value)}
+                        onMouseEnter={() => {
+                            if (!showDepartureSuggestions) {
+                                handleDepartureChange(data.transport.placeDeparture);
+                            }
+                        }}
                         placeholder="พิมพ์ชื่อท่าเรือ/สถานที่..."
                      />
                      {showDepartureSuggestions && departureSuggestions.length > 0 && (
@@ -686,7 +712,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
         <div className="p-6 bg-slate-50/30">
             <div className="space-y-3 pl-2">
                  <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-slate-50 rounded">
-                    <input type="checkbox" className="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500"
+                    <input type="checkbox" className={checkboxClass}
                         checked={data.specialConditions.thirdPartyInvoicing} onChange={() => toggleCondition('thirdPartyInvoicing')} />
                     <span className="text-slate-700 font-medium">Third Party Invoicing</span>
                 </label>
@@ -708,13 +734,13 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                 )}
 
                 <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-slate-50 rounded">
-                    <input type="checkbox" className="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500"
+                    <input type="checkbox" className={checkboxClass}
                         checked={data.specialConditions.backToBack} onChange={() => toggleCondition('backToBack')} />
                     <span className="text-slate-700 font-medium">Movement Certificate (Back-to-back)</span>
                 </label>
 
                 <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-slate-50 rounded">
-                    <input type="checkbox" className="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500"
+                    <input type="checkbox" className={checkboxClass}
                         checked={data.specialConditions.exhibitions} onChange={() => toggleCondition('exhibitions')} />
                     <span className="text-slate-700 font-medium">Exhibition</span>
                 </label>
@@ -780,7 +806,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                      <div className="col-span-9">
                          <div className="space-y-2">
                              <label className={`flex items-center gap-2 ${!data.specialConditions.thirdPartyInvoicing ? 'opacity-50 pointer-events-none' : ''}`}>
-                                 <input type="radio" name="invType" className="w-4 h-4 text-blue-600" 
+                                 <input type="radio" name="invType" className={radioClass} 
                                     checked={newInvoice.type === 'INVOICE_THAI'} 
                                     onChange={() => setNewInvoice({...newInvoice, type: 'INVOICE_THAI'})} 
                                     disabled={!data.specialConditions.thirdPartyInvoicing}
@@ -791,14 +817,14 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                              {data.specialConditions.thirdPartyInvoicing && (
                                  <>
                                      <label className="flex items-center gap-2">
-                                         <input type="radio" name="invType" className="w-4 h-4 text-blue-600" 
+                                         <input type="radio" name="invType" className={radioClass} 
                                             checked={newInvoice.type === 'INVOICE_ABROAD'} 
                                             onChange={() => setNewInvoice({...newInvoice, type: 'INVOICE_ABROAD'})} 
                                          />
                                          <span>INVOICE ต่างประเทศ</span>
                                      </label>
                                      <label className="flex items-center gap-2">
-                                         <input type="radio" name="invType" className="w-4 h-4 text-blue-600" 
+                                         <input type="radio" name="invType" className={radioClass} 
                                             checked={newInvoice.type === 'INVOICE_ABROAD_THAI'} 
                                             onChange={() => setNewInvoice({...newInvoice, type: 'INVOICE_ABROAD_THAI'})} 
                                          />
@@ -884,12 +910,18 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                                     rows={3}
                                     value={sm.mark} 
                                     onChange={(e) => handleUpdateShippingMark(sm.id, e.target.value)}
-                                    placeholder="ระบุ Shipping Mark..."
+                                    placeholder={index === 0 ? "ระบุ Shipping Mark (ค่าตั้งต้น)..." : "ระบุ Shipping Mark เพิ่มเติม..."}
                                  />
                              </div>
-                             <button type="button" onClick={() => handleDeleteShippingMark(sm.id)} className="text-red-500 hover:bg-red-50 p-1 rounded">
-                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                             </button>
+                             {index > 0 ? (
+                                 <button type="button" onClick={() => handleDeleteShippingMark(sm.id)} className="text-red-500 hover:bg-red-50 p-1 rounded">
+                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                 </button>
+                             ) : (
+                                <button type="button" disabled className="text-gray-300 p-1 rounded cursor-not-allowed" title="รายการแรกไม่สามารถลบได้">
+                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                             )}
                          </div>
                      ))}
                  </div>
@@ -958,7 +990,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                  <div className="space-y-4 pl-4">
                      <div className="grid grid-cols-12 items-center">
                          <div className="col-span-1 text-center">
-                            <input type="checkbox" checked={data.showTotalValueFobUs} onChange={e => setData(p => ({...p, showTotalValueFobUs: e.target.checked}))} className="w-5 h-5 text-blue-600 rounded border-gray-300" />
+                            <input type="checkbox" checked={data.showTotalValueFobUs} onChange={e => setData(p => ({...p, showTotalValueFobUs: e.target.checked}))} className={checkboxClass} />
                          </div>
                          <div className="col-span-4 text-sm text-slate-700">ผลรวมมูลค่า FOB USD INVOICE ไทย</div>
                          <div className="col-span-7 flex gap-4 items-center">
@@ -969,7 +1001,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                      
                      <div className="grid grid-cols-12 items-center opacity-50">
                          <div className="col-span-1 text-center">
-                            <input type="checkbox" disabled checked={data.showTotalValueFobUsOther} className="w-5 h-5 text-blue-600 rounded border-gray-300" />
+                            <input type="checkbox" disabled checked={data.showTotalValueFobUsOther} className={checkboxClass} />
                          </div>
                          <div className="col-span-4 text-sm text-slate-700">ผลรวมมูลค่า FOB ตามสกุลเงินอื่น</div>
                          <div className="col-span-7 text-sm text-slate-400 italic">ไม่มีผลรวมมูลค่า FOB ตามสกุลเงินอื่น</div>
@@ -977,7 +1009,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
 
                      <div className="grid grid-cols-12 items-center opacity-50">
                          <div className="col-span-1 text-center">
-                            <input type="checkbox" disabled checked={data.showTotalInvoiceOtherCountryUsValue} className="w-5 h-5 text-blue-600 rounded border-gray-300" />
+                            <input type="checkbox" disabled checked={data.showTotalInvoiceOtherCountryUsValue} className={checkboxClass} />
                          </div>
                          <div className="col-span-4 text-sm text-slate-700">ผลรวมมูลค่า FOB USD กรณีใช้ INVOICE ต่างประเทศ</div>
                          <div className="col-span-7 text-sm text-slate-400 italic">ไม่มีผลรวมมูลค่า FOB USD กรณีใช้ INVOICE ต่างประเทศ</div>
@@ -985,7 +1017,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
 
                      <div className="grid grid-cols-12 items-center">
                          <div className="col-span-1 text-center">
-                            <input type="checkbox" checked={data.showTotalNetWeight} onChange={e => setData(p => ({...p, showTotalNetWeight: e.target.checked}))} className="w-5 h-5 text-blue-600 rounded border-gray-300" />
+                            <input type="checkbox" checked={data.showTotalNetWeight} onChange={e => setData(p => ({...p, showTotalNetWeight: e.target.checked}))} className={checkboxClass} />
                          </div>
                          <div className="col-span-4 text-sm text-slate-700">ผลรวม Net weight</div>
                          <div className="col-span-7 flex gap-4 items-center">
@@ -1091,7 +1123,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                                                     <input 
                                                         type="radio" 
                                                         name="selectedShippingMark" 
-                                                        className="w-4 h-4 text-blue-600" 
+                                                        className={radioClass}
                                                         checked={newProduct.selectedShippingMarkId === sm.id}
                                                         onChange={() => updateNewProduct('selectedShippingMarkId', sm.id)}
                                                     />
@@ -1149,15 +1181,15 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                                  </div>
                                  <div className="col-span-9 space-y-2">
                                      <label className="flex items-center gap-2">
-                                         <input type="checkbox" checked={newProduct.showNetWeight} onChange={e => updateNewProduct('showNetWeight', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                         <input type="checkbox" checked={newProduct.showNetWeight} onChange={e => updateNewProduct('showNetWeight', e.target.checked)} className={checkboxClass} />
                                          <span>NET WEIGHT</span>
                                      </label>
                                      <label className="flex items-center gap-2">
-                                         <input type="checkbox" checked={newProduct.showGrossWeight} onChange={e => updateNewProduct('showGrossWeight', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                         <input type="checkbox" checked={newProduct.showGrossWeight} onChange={e => updateNewProduct('showGrossWeight', e.target.checked)} className={checkboxClass} />
                                          <span>GROSS WEIGHT</span>
                                      </label>
                                      <label className="flex items-center gap-2">
-                                         <input type="checkbox" checked={newProduct.showOtherQuantity} onChange={e => updateNewProduct('showOtherQuantity', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                         <input type="checkbox" checked={newProduct.showOtherQuantity} onChange={e => updateNewProduct('showOtherQuantity', e.target.checked)} className={checkboxClass} />
                                          <span>OTHER QUANTITY</span>
                                      </label>
                                  </div>
@@ -1209,7 +1241,7 @@ const SmartCOForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
                          <div className="space-y-3">
                              {['WO', 'PE', 'PSR', 'RVC'].map((crit) => (
                                  <label key={crit} className="flex items-start gap-3 cursor-pointer">
-                                     <div className="pt-1"><input type="radio" name="originCriteria" className="w-4 h-4 text-blue-600" checked={newProduct.originCriteria === crit} onChange={() => updateNewProduct('originCriteria', crit)} /></div>
+                                     <div className="pt-1"><input type="radio" name="originCriteria" className={radioClass} checked={newProduct.originCriteria === crit} onChange={() => updateNewProduct('originCriteria', crit)} /></div>
                                      <span className="text-slate-700 text-xs pt-0.5 font-medium">
                                          {crit === 'WO' && '"WO" สำหรับสินค้าที่ได้มาทั้งหมด หรือผลิตโดยใช้วัตถุดิบในไทย'}
                                          {crit === 'PE' && '"PE" สำหรับสินค้าที่ผลิตจากการใช้วัตถุดิบที่ได้ถิ่นกำเนิดจากประเทศภาคีสมาชิก'}
